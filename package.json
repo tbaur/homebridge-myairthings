@@ -1,7 +1,7 @@
 {
   "name": "homebridge-myairthings",
   "displayName": "Homebridge My Airthings",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Homebridge platform for Airthings monitors: one air-quality accessory per device, HomeKit services for what Apple Home shows, and the rest of the readings for Eve",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
