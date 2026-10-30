@@ -22,7 +22,7 @@ The [README](../README.md) covers installation and setup. This page covers every
 | refreshInterval | 300 | Seconds between sensor reads. Below 60 becomes 60. Above 86400 becomes 86400. |
 | co2DetectedThreshold | 1000 | ppm at which carbon dioxide is detected. The air-quality tile follows radon. |
 | debug | false | Logs radon, CO₂, and temperature for each monitor after every poll, at info level, so Homebridge does not need `-D`. |
-| diagnosticsInterval | 0 | Seconds between a health line. 0 is off. Otherwise 30 to 3600. |
+| diagnosticsInterval | 0 | Seconds between a health line. 0 is off. Otherwise up to 3600. Values from 1 to 29 use 30. |
 | pagerdutySignals | false | Write alert conditions for [homebridge-pagerduty](https://github.com/tbaur/homebridge-pagerduty). Off until you turn it on. See [PagerDuty](#pagerduty). |
 
 An empty config, with no client id and no client secret and no environment variables, does not start and does not remove cached accessories.

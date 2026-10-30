@@ -12,6 +12,7 @@ import {
   DEFAULT_CO2_DETECTED_PPM,
   DEFAULT_REFRESH_SEC,
   MAX_CO2_DETECTED_PPM,
+  MAX_DIAGNOSTICS_INTERVAL_SEC,
   MAX_REFRESH_SEC,
   MIN_CO2_DETECTED_PPM,
   MIN_REFRESH_SEC,
@@ -19,6 +20,9 @@ import {
 } from '../../src/settings'
 
 interface SchemaNode {
+  type?: string
+  anyOf?: unknown
+  oneOf?: unknown
   required?: unknown
   default?: unknown
   minimum?: number
@@ -77,6 +81,13 @@ describe('config.schema.json', () => {
     })
   })
 
+  it('gives every setting a single type, so the Homebridge UI draws an input for it', () => {
+    for (const [key, node] of Object.entries(props)) {
+      expect({ key, type: typeof node.type }).toEqual({ key, type: 'string' })
+      expect({ key, anyOf: node.anyOf, oneOf: node.oneOf }).toEqual({ key, anyOf: undefined, oneOf: undefined })
+    }
+  })
+
   it('matches the runtime bounds and hides the secret', () => {
     expect(props.refreshInterval).toMatchObject({
       default: DEFAULT_REFRESH_SEC,
@@ -87,6 +98,12 @@ describe('config.schema.json', () => {
       default: DEFAULT_CO2_DETECTED_PPM,
       minimum: MIN_CO2_DETECTED_PPM,
       maximum: MAX_CO2_DETECTED_PPM,
+    })
+    expect(props.diagnosticsInterval).toMatchObject({
+      type: 'integer',
+      default: 0,
+      minimum: 0,
+      maximum: MAX_DIAGNOSTICS_INTERVAL_SEC,
     })
     expect(props.clientSecret?.['x-schema-form']).toEqual({ type: 'password' })
     expect(props.pagerdutySignals?.default).toBe(false)
