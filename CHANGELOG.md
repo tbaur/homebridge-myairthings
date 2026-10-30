@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/tbaur/homebridge-myairthings/compare/v1.0.1...v1.0.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* log per-poll readings at debug level with the sample age ([#4](https://github.com/tbaur/homebridge-myairthings/issues/4)) ([1d11d17](https://github.com/tbaur/homebridge-myairthings/commit/1d11d171961d3bc80e63702b9a935d32e1d1740d))
+
 ## [1.0.1](https://github.com/tbaur/homebridge-myairthings/compare/v1.0.0...v1.0.1) (2026-10-30)
 
 
