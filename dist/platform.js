@@ -318,16 +318,17 @@ class AirthingsPlatform {
             this.log.info(line);
         }
     }
-    /** Info, not debug: the setting is the opt-in, and Homebridge hides debug lines unless it runs with -D. */
+    /** Debug, like the other plugins: Homebridge shows it only in debug mode, and only when the setting is on. */
     logReadings(monitors) {
         if (this.config?.debug !== true) {
             return;
         }
+        const now = Date.now();
         for (const monitor of monitors) {
             const reading = monitor.reading;
-            this.log.info(`${(0, redact_1.forLog)(monitor.serialNumber)} radon=${reading.radonShortBq ?? '-'} `
+            this.log.debug(`${(0, redact_1.forLog)(monitor.serialNumber)} radon=${reading.radonShortBq ?? '-'} `
                 + `co2=${reading.co2Ppm ?? '-'} temp=${reading.temperatureC ?? '-'} `
-                + `recordedAt=${reading.recordedAt ?? '-'}`);
+                + `age=${(0, sample_1.sampleAge)(reading.recordedAt, now)}`);
         }
     }
     keepRestoredUnavailable() {

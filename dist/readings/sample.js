@@ -10,6 +10,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizeSample = normalizeSample;
 exports.parseRecordedAt = parseRecordedAt;
+exports.sampleAge = sampleAge;
 exports.isFresh = isFresh;
 exports.inactiveReason = inactiveReason;
 const settings_1 = require("../settings");
@@ -37,6 +38,14 @@ function parseRecordedAt(value) {
     const withZone = /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : `${value}Z`;
     const ms = Date.parse(withZone);
     return Number.isNaN(ms) ? undefined : ms;
+}
+/** How old a sample is, for a log line: `-`, `7m`, or `3h12m`. A timestamp ahead of this clock reads `0m`. */
+function sampleAge(recordedAt, now) {
+    if (recordedAt === undefined) {
+        return '-';
+    }
+    const minutes = Math.max(0, Math.floor((now - recordedAt) / 60_000));
+    return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`;
 }
 function isFresh(recordedAt, now) {
     return inactiveReason(recordedAt, now) === undefined;

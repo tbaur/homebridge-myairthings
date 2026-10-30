@@ -53,7 +53,7 @@ export declare class AirthingsPlatform implements DynamicPlatformPlugin, Accesso
     private adopt;
     private removeMissing;
     private report;
-    /** Info, not debug: the setting is the opt-in, and Homebridge hides debug lines unless it runs with -D. */
+    /** Debug, like the other plugins: Homebridge shows it only in debug mode, and only when the setting is on. */
     private logReadings;
     private keepRestoredUnavailable;
     private markStale;

@@ -7,7 +7,7 @@
 
 import { airQuality } from '../../../src/readings/quality'
 import { hasPublishableSensor, planFor, unknownSensorNames } from '../../../src/readings/plan'
-import { isFresh, normalizeSample, parseRecordedAt } from '../../../src/readings/sample'
+import { isFresh, normalizeSample, parseRecordedAt, sampleAge } from '../../../src/readings/sample'
 import { convertSensor, microgramsToPpb, ppbToMicrograms } from '../../../src/readings/units'
 import { FUTURE_SKEW_MS, STALE_AFTER_MS } from '../../../src/settings'
 import type { SensorPlan } from '../../../src/types'
@@ -108,5 +108,13 @@ describe('samples', () => {
     expect(isFresh(NOW - STALE_AFTER_MS - 1, NOW)).toBe(false)
     expect(isFresh(NOW + FUTURE_SKEW_MS, NOW)).toBe(true)
     expect(isFresh(NOW + FUTURE_SKEW_MS + 1, NOW)).toBe(false)
+  })
+
+  it('writes a sample age a person can read', () => {
+    expect(sampleAge(undefined, NOW)).toBe('-')
+    expect(sampleAge(NOW + 90_000, NOW)).toBe('0m')
+    expect(sampleAge(NOW - 59_999, NOW)).toBe('0m')
+    expect(sampleAge(NOW - 10 * 60_000, NOW)).toBe('10m')
+    expect(sampleAge(NOW - 192 * 60_000, NOW)).toBe('3h12m')
   })
 })

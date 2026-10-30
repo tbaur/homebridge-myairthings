@@ -21,7 +21,7 @@ The [README](../README.md) covers installation and setup. This page covers every
 | clientSecret | | From an API client on the Airthings consumer dashboard. `AIRTHINGS_CLIENT_SECRET` overrides this. |
 | refreshInterval | 300 | Seconds between sensor reads. Below 60 becomes 60. Above 86400 becomes 86400. |
 | co2DetectedThreshold | 1000 | ppm at which carbon dioxide is detected. The air-quality tile follows radon. |
-| debug | false | Logs radon, CO₂, and temperature for each monitor after every poll, at info level, so Homebridge does not need `-D`. |
+| debug | false | Logs radon, CO₂, temperature, and sample age for each monitor after every poll, as debug lines. Homebridge shows them only in debug mode. |
 | diagnosticsInterval | 0 | Seconds between a health line. 0 is off. Otherwise up to 3600. Values from 1 to 29 use 30. |
 | pagerdutySignals | false | Write alert conditions for [homebridge-pagerduty](https://github.com/tbaur/homebridge-pagerduty). Off until you turn it on. See [PagerDuty](#pagerduty). |
 
@@ -52,7 +52,7 @@ A monitor is removed only when a device-list request succeeds and that serial is
 | `Airthings rejected the client credentials` | Once per failure streak. The secret is not in the line. |
 | `Airthings rate limit reached. Retry in Ns` | The hourly budget was spent. |
 | `<name> inactive: sample older than three hours` | Once, when that monitor becomes inactive. The reason is the sample age, a missing timestamp, a timestamp ahead of this clock, no sample from Airthings for that monitor, three unreachable polls, or a poll that threw. |
-| `<serial> radon=40 co2=650 temp=21.5 recordedAt=…` | After every poll, for each monitor, when `debug` is on. `-` means the sample did not include that reading. |
+| `<serial> radon=40 co2=650 temp=21.5 age=7m` | Debug. After every poll, for each monitor, when `debug` is on and Homebridge is in debug mode. `age` is how long ago the monitor took the sample. Airthings uploads on its own schedule, so a few minutes is normal. `-` means the sample did not include that reading. |
 | `poll failed: …` | A fault inside the plugin while applying a poll. The sensors go inactive, and the next poll is still the normal interval. |
 | `homebridge-pagerduty support is enabled (auth-failed, cloud-offline, stale.<serial>)` | Once, at startup, when signals are on. It is logged before the first poll. |
 | `Diagnostics start: healthy \| devices 0/0 \| rest connecting \| api p50 0ms p95 0ms (req 0, err 0)` | Once, when `diagnosticsInterval` is on, before the poll loop is armed. The plugin version is not on this line. |
