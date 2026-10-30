@@ -55,12 +55,14 @@
       },
       "diagnosticsInterval": {
         "title": "Diagnostics Interval (seconds)",
+        "type": "integer",
         "default": 0,
-        "description": "0 is off. Otherwise a health line at this interval, from 30 to 3600 seconds.",
-        "anyOf": [
-          { "type": "integer", "const": 0 },
-          { "type": "integer", "minimum": 30, "maximum": 3600 }
-        ]
+        "minimum": 0,
+        "maximum": 3600,
+        "x-schema-form": {
+          "type": "number"
+        },
+        "description": "0 is off. Otherwise a health line at this interval, up to 3600 seconds. Values from 1 to 29 use 30."
       },
       "pagerdutySignals": {
         "title": "Send Signals to PagerDuty",
