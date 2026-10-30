@@ -1,0 +1,83 @@
+{
+  "pluginAlias": "MyAirthings",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Every Airthings monitor on the account becomes one air-quality accessory. Apple Home shows the readings it understands. Eve shows radon, pressure, and the rest. The Good / Fair / Poor tile is radon, on every monitor that reports radon.",
+  "footerDisplay": "The client secret is stored in the Homebridge configuration file, like every Homebridge credential, and is never written to the log. Create the client at the Airthings consumer dashboard. The [documentation](https://github.com/tbaur/homebridge-myairthings#readme) explains each setting.",
+  "schema": {
+    "type": "object",
+    "required": ["name"],
+    "properties": {
+      "name": {
+        "title": "Platform Name",
+        "type": "string",
+        "default": "My Airthings",
+        "description": "Shown in the Homebridge log."
+      },
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "description": "From an API client on the Airthings consumer dashboard. AIRTHINGS_CLIENT_ID overrides this."
+      },
+      "clientSecret": {
+        "title": "Client Secret",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "x-schema-form": {
+          "type": "password"
+        },
+        "description": "From an API client on the Airthings consumer dashboard. AIRTHINGS_CLIENT_SECRET overrides this."
+      },
+      "refreshInterval": {
+        "title": "Refresh Interval (seconds)",
+        "type": "integer",
+        "default": 300,
+        "minimum": 60,
+        "maximum": 86400,
+        "description": "How often to read sensors. Default 300. Airthings allows 120 requests an hour for the whole account. Values below 60 use 60."
+      },
+      "co2DetectedThreshold": {
+        "title": "CO₂ Detected Threshold (ppm)",
+        "type": "integer",
+        "default": 1000,
+        "minimum": 400,
+        "maximum": 5000,
+        "description": "Carbon dioxide at or above this value is detected. Default 1000, which is Airthings' poor band. The air-quality tile follows radon."
+      },
+      "debug": {
+        "title": "Debug Logging",
+        "type": "boolean",
+        "default": false,
+        "description": "Logs radon, CO₂, and temperature for each monitor after every poll."
+      },
+      "diagnosticsInterval": {
+        "title": "Diagnostics Interval (seconds)",
+        "default": 0,
+        "description": "0 is off. Otherwise a health line at this interval, from 30 to 3600 seconds.",
+        "anyOf": [
+          { "type": "integer", "const": 0 },
+          { "type": "integer", "minimum": 30, "maximum": 3600 }
+        ]
+      },
+      "pagerdutySignals": {
+        "title": "Send Signals to PagerDuty",
+        "type": "boolean",
+        "default": false,
+        "description": "Write this plugin's alert conditions to homebridge-pagerduty's signal store. Then allow homebridge-myairthings to page in homebridge-pagerduty's settings. Needs Node 22.13 or later."
+      }
+    }
+  },
+  "layout": [
+    "name",
+    "clientId",
+    "clientSecret",
+    "refreshInterval",
+    "co2DetectedThreshold",
+    "debug",
+    "diagnosticsInterval",
+    "pagerdutySignals"
+  ]
+}

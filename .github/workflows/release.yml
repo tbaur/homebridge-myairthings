@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        with:
+          token: ${{ github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: Publish to npm
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.x
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      - name: Upgrade npm
+        run: npm install -g npm@11.19.1
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Build TypeScript
+        run: npm run build
+      - name: Run linter
+        run: npm run lint
+      - name: Run tests
+        run: npm test
+        env:
+          NODE_ENV: test
+      - name: Verify npm package contents
+        run: npm publish --dry-run --access public
+      - name: Publish to npm
+        run: npm publish --provenance --access public
