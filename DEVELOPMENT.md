@@ -127,7 +127,7 @@ homebridge -D
 
 `npm install -g .` updates the npm prefix of the shell you run it in. If Homebridge was installed with a different npm, run the install with that one, then restart Homebridge.
 
-Enter the client id and client secret in the plugin settings. The platform name is MyAirthings. The `debug` setting prints radon, CO₂, and temperature after every poll. It does not print the secret.
+Enter the client id and client secret in the plugin settings. The platform name is MyAirthings. The `debug` setting prints radon, CO₂, temperature, and sample age after every poll, as debug lines that Homebridge shows only in debug mode. It does not print the secret.
 
 ## Adding a setting
 

@@ -43,6 +43,15 @@ export function parseRecordedAt(value: string): number | undefined {
   return Number.isNaN(ms) ? undefined : ms
 }
 
+/** How old a sample is, for a log line: `-`, `7m`, or `3h12m`. A timestamp ahead of this clock reads `0m`. */
+export function sampleAge(recordedAt: number | undefined, now: number): string {
+  if (recordedAt === undefined) {
+    return '-'
+  }
+  const minutes = Math.max(0, Math.floor((now - recordedAt) / 60_000))
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`
+}
+
 export function isFresh(recordedAt: number | undefined, now: number): boolean {
   return inactiveReason(recordedAt, now) === undefined
 }

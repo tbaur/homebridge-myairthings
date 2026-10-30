@@ -197,7 +197,9 @@ describe('AirthingsPlatform', () => {
     expect(plus.getService(Service.Battery)?.getCharacteristic(Characteristic.StatusLowBattery).value)
       .toBe(Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW)
     expect(lines.some((line) => line.includes('View Plus'))).toBe(true)
-    expect(lines).toContainEqual(expect.stringMatching(new RegExp(`^info ${PLUS} radon=40 co2=1500 temp=21 `)))
+    expect(lines).toContainEqual(
+      expect.stringMatching(new RegExp(`^debug ${PLUS} radon=40 co2=1500 temp=21 age=(\\d+h)?\\d+m$`)),
+    )
   })
 
   it('does not log readings when the debug setting is off', async () => {

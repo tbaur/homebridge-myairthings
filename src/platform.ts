@@ -25,7 +25,7 @@ import { CloudSession } from './session'
 import { DEFAULT_CO2_DETECTED_PPM, DEFAULT_NAME, PLATFORM_NAME, PLUGIN_NAME, readPluginVersion, UUID_PREFIX } from './settings'
 import type { CloudView, MonitorSnapshot, PluginLogger, PollOutcome, ResolvedConfig } from './types'
 import { parseAccessoryContext, resolvedDisplayName, writeContext } from './utils/context'
-import { isFresh } from './readings/sample'
+import { isFresh, sampleAge } from './readings/sample'
 import { describeError } from './utils/errors'
 import { homeKitName, modelLabel } from './utils/names'
 import { forLog } from './utils/redact'
@@ -341,17 +341,18 @@ export class AirthingsPlatform implements DynamicPlatformPlugin, AccessoryHost {
     }
   }
 
-  /** Info, not debug: the setting is the opt-in, and Homebridge hides debug lines unless it runs with -D. */
+  /** Debug, like the other plugins: Homebridge shows it only in debug mode, and only when the setting is on. */
   private logReadings(monitors: readonly MonitorSnapshot[]): void {
     if (this.config?.debug !== true) {
       return
     }
+    const now = Date.now()
     for (const monitor of monitors) {
       const reading = monitor.reading
-      this.log.info(
+      this.log.debug(
         `${forLog(monitor.serialNumber)} radon=${reading.radonShortBq ?? '-'} `
         + `co2=${reading.co2Ppm ?? '-'} temp=${reading.temperatureC ?? '-'} `
-        + `recordedAt=${reading.recordedAt ?? '-'}`,
+        + `age=${sampleAge(reading.recordedAt, now)}`,
       )
     }
   }
