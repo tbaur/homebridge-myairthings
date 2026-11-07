@@ -40,7 +40,9 @@
     "js-yaml": "^4.3.2",
     "brace-expansion": "^5.0.12",
     "handlebars": "^4.7.10",
-    "deepmerge": "4.1.2"
+    "deepmerge": "4.1.2",
+    "glob": "^14.0.2",
+    "minimatch": "^11.0.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -64,7 +66,7 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
     "pretest": "npm run build",
-    "test": "NODE_ENV=test jest --coverage",
+    "test": "NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "test:watch": "NODE_ENV=test jest --watch --coverage=false",
     "test:unit": "npm run build && NODE_ENV=test jest --coverage --testPathPatterns tests/unit",
     "lint": "eslint . --max-warnings 0",
