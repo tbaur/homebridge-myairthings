@@ -39,7 +39,7 @@ class BaseAccessory {
     }
     requireAvailable() {
         if (this.unavailable) {
-            throw new this.host.api.hap.HapStatusError(-70402 /* this.host.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE */);
+            throw new this.host.api.hap.HapStatusError(this.host.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
         }
     }
     publish(service, characteristic, value) {
