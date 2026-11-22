@@ -35,8 +35,15 @@ export interface SampleBatch {
 }
 
 /** What the session needs from the API. */
+/** The hourly request budget from the last response that reported it. */
+export interface RateBudget {
+  remaining: number
+  limit?: number
+}
+
 export interface CloudClient {
   blockedForMs(now: number): number
+  rateBudget?(): RateBudget | undefined
   listDevices(): Promise<ListedDevice[]>
   listSamples(accountIds: readonly string[]): Promise<SampleBatch>
   abort(): void
@@ -62,6 +69,7 @@ export class AirthingsClient implements CloudClient {
   private readonly now: () => number
   private token?: Token
   private notBefore = 0
+  private budget?: RateBudget
   private abortController = new AbortController()
 
   constructor(private readonly options: ClientOptions) {
@@ -71,6 +79,10 @@ export class AirthingsClient implements CloudClient {
 
   blockedForMs(now: number): number {
     return Math.max(0, this.notBefore - now)
+  }
+
+  rateBudget(): RateBudget | undefined {
+    return this.budget
   }
 
   abort(): void {
@@ -225,6 +237,11 @@ export class AirthingsClient implements CloudClient {
   }
 
   private note(headers: HttpResponse['headers']): void {
+    const remaining = headerNumber(headers, 'x-ratelimit-remaining')
+    if (remaining !== undefined) {
+      const limit = headerNumber(headers, 'x-ratelimit-limit')
+      this.budget = limit === undefined ? { remaining } : { remaining, limit }
+    }
     const wait = rateLimitWaitMs(headers, this.now())
     if (wait !== undefined) {
       this.notBefore = Math.max(this.notBefore, this.now() + wait)
@@ -258,4 +275,13 @@ function rejectedDeviceLine(serial: string): string {
     return 'a device was skipped; it had no serial number'
   }
   return `device serial "${forLog(serial)}" was skipped; a serial is 4 to 32 letters or digits`
+}
+
+function headerNumber(headers: HttpResponse['headers'], name: string): number | undefined {
+  const raw = headers[name]
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (value === undefined || !/^\d+$/.test(value.trim())) {
+    return undefined
+  }
+  return Number(value.trim())
 }

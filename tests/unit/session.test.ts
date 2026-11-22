@@ -195,6 +195,24 @@ describe('CloudSession', () => {
     const recovered = await session.poll()
 
     expect(recovered.view?.monitors).toHaveLength(1)
-    expect(log.lines).toContain('info Airthings is reachable again')
+    expect(log.lines).toContain('info Airthings is reachable again after 1 failed poll')
+  })
+
+  it('says how many polls failed and for how long', async () => {
+    const log = logger()
+    let now = 0
+    const listDevices = jest.fn()
+      .mockRejectedValueOnce(new ConnectionError('down'))
+      .mockRejectedValueOnce(new ConnectionError('down'))
+      .mockResolvedValue([PLUS])
+    const session = new CloudSession({ client: client({ listDevices }), log, intervalMs: 300_000, now: () => now })
+
+    await session.poll()
+    now = 300_000
+    await session.poll()
+    now = 18 * 60_000
+    await session.poll()
+
+    expect(log.lines).toContain('info Airthings is reachable again after 2 failed polls (18 min)')
   })
 })

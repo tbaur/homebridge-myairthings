@@ -32,6 +32,7 @@ import {
   RateLimitedError,
   describeError,
 } from './utils/errors'
+import { formatDuration } from './readings/report'
 import { forLog } from './utils/redact'
 
 const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 300_000]
@@ -54,6 +55,9 @@ export class CloudSession {
   private outageStreak = 0
   private authLogged = false
   private outageLogged = false
+  /** Failed polls since the last accepted one, and when the first of them ran. */
+  private failedPolls = 0
+  private failingSince?: number
   private readonly announcedUnknown = new Set<string>()
 
   constructor(private readonly options: SessionOptions) {}
@@ -127,6 +131,7 @@ export class CloudSession {
       return idle(error.retryAfterMs)
     }
     if (error instanceof AuthError) {
+      this.noteFailure()
       this.logAuth()
       this.authStreak += 1
       this.authOpen = true
@@ -150,6 +155,7 @@ export class CloudSession {
       }
     }
     if (countsAsOutage(error)) {
+      this.noteFailure()
       this.logOutage(error)
       this.outageStreak += 1
       const cloudOffline = !this.authOpen && this.outageStreak >= FAILURES_BEFORE_STALE
@@ -178,7 +184,7 @@ export class CloudSession {
       return
     }
     this.authLogged = true
-      this.options.log.error('Airthings rejected the client credentials')
+    this.options.log.error('Airthings rejected the client credentials')
   }
 
   private logOutage(error: unknown): void {
@@ -191,13 +197,25 @@ export class CloudSession {
     this.options.log.warn(line)
   }
 
+  private noteFailure(): void {
+    this.failedPolls += 1
+    this.failingSince ??= this.now()
+  }
+
   private noteRecovery(): void {
+    const failed = this.failedPolls
+    const since = this.failingSince
+    this.failedPolls = 0
+    this.failingSince = undefined
     if (!this.authLogged && !this.outageLogged) {
       return
     }
     this.authLogged = false
     this.outageLogged = false
-    this.options.log.info('Airthings is reachable again')
+    const polls = failed === 1 ? '1 failed poll' : `${failed} failed polls`
+    const elapsed = since === undefined ? 0 : this.now() - since
+    const duration = elapsed >= 60_000 ? ` (${formatDuration(elapsed)})` : ''
+    this.options.log.info(`Airthings is reachable again after ${polls}${duration}`)
   }
 
   private logUnmapped(devices: readonly ListedDevice[]): void {

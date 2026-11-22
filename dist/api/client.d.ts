@@ -16,8 +16,14 @@ export interface SampleBatch {
     ignored: readonly string[];
 }
 /** What the session needs from the API. */
+/** The hourly request budget from the last response that reported it. */
+export interface RateBudget {
+    remaining: number;
+    limit?: number;
+}
 export interface CloudClient {
     blockedForMs(now: number): number;
+    rateBudget?(): RateBudget | undefined;
     listDevices(): Promise<ListedDevice[]>;
     listSamples(accountIds: readonly string[]): Promise<SampleBatch>;
     abort(): void;
@@ -36,9 +42,11 @@ export declare class AirthingsClient implements CloudClient {
     private readonly now;
     private token?;
     private notBefore;
+    private budget?;
     private abortController;
     constructor(options: ClientOptions);
     blockedForMs(now: number): number;
+    rateBudget(): RateBudget | undefined;
     abort(): void;
     listDevices(): Promise<ListedDevice[]>;
     listSamples(accountIds: readonly string[]): Promise<SampleBatch>;

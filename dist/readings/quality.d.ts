@@ -16,3 +16,5 @@
  */
 import type { AirQualityWord, NormalizedReading, SensorPlan } from '../types';
 export declare function airQuality(plan: SensorPlan, reading: NormalizedReading): AirQualityWord;
+/** The reading that set the tile's level, for a log line: `radon 160 Bq/m³`. */
+export declare function qualityCause(plan: SensorPlan, reading: NormalizedReading): string | undefined;

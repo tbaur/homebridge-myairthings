@@ -51,7 +51,7 @@
         "title": "Debug Logging",
         "type": "boolean",
         "default": false,
-        "description": "Logs radon, CO₂, temperature, and sample age for each monitor after every poll, as debug lines. Homebridge shows them only in debug mode."
+        "description": "Logs a debug line after every poll: monitors polled, new and unchanged samples, the wait until the next poll, and the hourly request budget. Homebridge shows it only in debug mode."
       },
       "diagnosticsInterval": {
         "title": "Diagnostics Interval (seconds)",

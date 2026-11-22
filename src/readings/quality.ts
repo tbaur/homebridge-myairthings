@@ -45,6 +45,31 @@ export function airQuality(plan: SensorPlan, reading: NormalizedReading): AirQua
   ])
 }
 
+/** The reading that set the tile's level, for a log line: `radon 160 Bq/m³`. */
+export function qualityCause(plan: SensorPlan, reading: NormalizedReading): string | undefined {
+  if (plan.radonShort || plan.radonLong) {
+    const becquerels = reading.radonShortBq ?? reading.radonLongBq
+    return becquerels === undefined ? undefined : `radon ${Math.round(becquerels)} Bq/m³`
+  }
+  const candidates: { level: AirQualityWord, text: string }[] = []
+  if (reading.co2Ppm !== undefined) {
+    candidates.push({ level: band(reading.co2Ppm, CO2_FAIR_PPM, CO2_POOR_PPM), text: `CO2 ${Math.round(reading.co2Ppm)} ppm` })
+  }
+  if (reading.pm25Micrograms !== undefined) {
+    candidates.push({ level: band(reading.pm25Micrograms, PM_FAIR, PM_POOR), text: `PM2.5 ${Math.round(reading.pm25Micrograms)} µg/m³` })
+  }
+  if (reading.vocPpb !== undefined) {
+    candidates.push({ level: band(reading.vocPpb, VOC_FAIR_PPB, VOC_POOR_PPB), text: `VOC ${Math.round(reading.vocPpb)} ppb` })
+  }
+  let cause: { level: AirQualityWord, text: string } | undefined
+  for (const candidate of candidates) {
+    if (cause === undefined || RANK[candidate.level] > RANK[cause.level]) {
+      cause = candidate
+    }
+  }
+  return cause?.text
+}
+
 function band(value: number, fairAt: number, poorAt: number): AirQualityWord {
   if (value >= poorAt) {
     return 'poor'

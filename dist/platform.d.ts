@@ -24,6 +24,10 @@ export declare class AirthingsPlatform implements DynamicPlatformPlugin, Accesso
     private readonly diagnostics;
     private config?;
     private session?;
+    private client?;
+    private readonly reporter;
+    /** When the next poll runs, for the poll summary line. */
+    private nextWaitMs;
     private timer?;
     private diagnosticsTimer?;
     private signals?;
@@ -49,11 +53,12 @@ export declare class AirthingsPlatform implements DynamicPlatformPlugin, Accesso
     private noteSignals;
     private logPagerDuty;
     private applyView;
+    private uuidDisplayName;
     private createAccessory;
     private adopt;
     private removeMissing;
     private report;
-    /** Debug, like the other plugins: Homebridge shows it only in debug mode, and only when the setting is on. */
+    /** A line per monitor when its sample is new or something about it changed, then one debug line for the poll. */
     private logReadings;
     private keepRestoredUnavailable;
     private markStale;

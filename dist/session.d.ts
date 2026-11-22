@@ -30,6 +30,9 @@ export declare class CloudSession {
     private outageStreak;
     private authLogged;
     private outageLogged;
+    /** Failed polls since the last accepted one, and when the first of them ran. */
+    private failedPolls;
+    private failingSince?;
     private readonly announcedUnknown;
     constructor(options: SessionOptions);
     abort(): void;
@@ -38,6 +41,7 @@ export declare class CloudSession {
     private fail;
     private logAuth;
     private logOutage;
+    private noteFailure;
     private noteRecovery;
     private logUnmapped;
     private logIgnored;

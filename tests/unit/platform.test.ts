@@ -197,12 +197,15 @@ describe('AirthingsPlatform', () => {
     expect(plus.getService(Service.Battery)?.getCharacteristic(Characteristic.StatusLowBattery).value)
       .toBe(Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW)
     expect(lines.some((line) => line.includes('View Plus'))).toBe(true)
-    expect(lines).toContainEqual(
-      expect.stringMatching(new RegExp(`^debug ${PLUS} radon=40 co2=1500 temp=21 age=(\\d+h)?\\d+m$`)),
+    expect(lines).toContain(
+      'info Zone One: Radon 40 Bq/m³, CO2 1500 ppm, VOC 100 ppb, PM2.5 3 µg/m³, PM1 1 µg/m³, 21.0°C, 40%, 1013 hPa, Air good, Battery 9%, sampled just now',
     )
+    expect(lines).toContain('info Zone One: CO2 above 1000 ppm (1500)')
+    expect(lines).toContain('info Zone One: battery low (9%)')
+    expect(lines).toContainEqual(expect.stringMatching(/^debug Poll ok: 2 monitor\(s\), 2 new sample\(s\), 0 unchanged; next in 300s/))
   })
 
-  it('does not log readings when the debug setting is off', async () => {
+  it('keeps the poll line at debug when the debug setting is off', async () => {
     const api = bridge()
     const platform = new AirthingsPlatform(log(), {
       platform: 'MyAirthings',
@@ -213,7 +216,8 @@ describe('AirthingsPlatform', () => {
     api.emit('didFinishLaunching')
     await platform.settled()
     expect(registered).toHaveLength(2)
-    expect(lines.some((line) => line.includes('radon='))).toBe(false)
+    expect(lines.some((line) => line.startsWith('debug Poll ok'))).toBe(false)
+    expect(lines.some((line) => line.startsWith('info Zone One: Radon'))).toBe(true)
     api.emit('shutdown')
   })
 

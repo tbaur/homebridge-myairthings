@@ -119,6 +119,23 @@ describe('AirthingsClient', () => {
     expect(calls.filter((call) => call.url.endsWith('/token'))).toHaveLength(1)
   })
 
+  it('reports the request budget from the last response that sent it', async () => {
+    const api = client((request) => {
+      if (request.url.endsWith('/token')) {
+        return json(200, { access_token: 'test-token', token_type: 'Bearer', expires_in: 3600 })
+      }
+      if (request.url.endsWith('/accounts')) {
+        return json(200, { accounts: [{ id: ACCOUNT }] }, { 'x-ratelimit-remaining': '118', 'x-ratelimit-limit': '120' })
+      }
+      return json(200, { devices: [] }, { 'x-ratelimit-remaining': '117' })
+    })
+
+    expect(api.rateBudget()).toBeUndefined()
+    await api.listDevices()
+
+    expect(api.rateBudget()).toEqual({ remaining: 117 })
+  })
+
   it('retries once after a 401 and pages sensors', async () => {
     let devices = 0
     const api = client((request) => {
