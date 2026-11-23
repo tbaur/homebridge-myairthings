@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/tbaur/homebridge-myairthings/compare/v1.0.2...v1.1.0) (2026-11-23)
+
+
+### Features
+
+* log each new sample and changes in air quality, CO2, battery and sample age ([a32a614](https://github.com/tbaur/homebridge-myairthings/commit/a32a6142c5740111e5a694615d6eb7d27f3c44de))
+
 ## [1.0.2](https://github.com/tbaur/homebridge-myairthings/compare/v1.0.1...v1.0.2) (2026-10-30)
 
 
