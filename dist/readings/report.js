@@ -7,11 +7,11 @@
  *
  * @fileoverview The log lines a poll writes about each monitor.
  *
- * A monitor gets a summary line when Airthings has a new sample for it, and a
- * short line when the air quality level, the CO₂ alert, or the battery state
- * changes, or when its samples fall behind. A poll that returns the same
- * sample again writes nothing, so the log follows the monitors rather than
- * the poll interval.
+ * A monitor gets a summary line for its first sample and for each new sample
+ * whose readings differ from the last one, and a short line when the air
+ * quality level or the CO₂ alert changes, when the battery falls another five
+ * points (two below 20%) or crosses the low level, or when its samples fall behind. A sample with the same readings, or a poll that
+ * returns the same sample again, writes nothing.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReadingReporter = exports.LOW_BATTERY_PERCENT = void 0;
@@ -21,6 +21,11 @@ const redact_1 = require("../utils/redact");
 const quality_1 = require("./quality");
 /** Battery level HomeKit reports as low. */
 exports.LOW_BATTERY_PERCENT = 10;
+/** A battery line is written each time the level falls this far below the last one logged. */
+const BATTERY_STEP_PERCENT = 5;
+/** Below this level the step shrinks, so a battery near empty is logged more often. */
+const BATTERY_NEAR_EMPTY_PERCENT = 20;
+const BATTERY_NEAR_EMPTY_STEP_PERCENT = 2;
 /** A sample counts as late only once it is at least this old. */
 const MIN_LATE_MS = 15 * 60_000;
 const FIELDS = [
@@ -56,10 +61,13 @@ class ReadingReporter {
         }
         const lines = [];
         const gapMs = previous === undefined ? undefined : recordedAt - previous.recordedAt;
-        if (previous?.lateLogged === true && gapMs !== undefined && gapMs >= 60_000) {
+        const resumed = previous?.lateLogged === true && gapMs !== undefined && gapMs >= 60_000;
+        if (resumed) {
             lines.push(`${name}: new sample after ${formatDuration(gapMs)}`);
         }
-        lines.push(`${name}: ${summary(previous?.reading, reading, input.plan, now)}`);
+        if (previous === undefined || resumed || valuesChanged(previous.reading, reading)) {
+            lines.push(`${name}: ${summary(previous?.reading, reading, input.plan, now)}`);
+        }
         // A sample without the readings that set the tile does not count as a
         // level change; the last known level stays the one to compare against.
         const measured = (0, quality_1.airQuality)(input.plan, reading);
@@ -80,11 +88,22 @@ class ReadingReporter {
             co2High = isHigh;
         }
         let batteryLow = previous?.batteryLow ?? false;
+        let batteryMark = previous?.batteryMark;
         if (reading.batteryPercent !== undefined) {
             const percent = Math.round(reading.batteryPercent);
             const isLow = percent <= exports.LOW_BATTERY_PERCENT;
+            const step = percent < BATTERY_NEAR_EMPTY_PERCENT ? BATTERY_NEAR_EMPTY_STEP_PERCENT : BATTERY_STEP_PERCENT;
+            const dropped = batteryMark !== undefined && percent <= batteryMark - step;
             if (isLow !== batteryLow) {
                 lines.push(isLow ? `${name}: battery low (${percent}%)` : `${name}: battery ok (${percent}%)`);
+            }
+            else if (dropped) {
+                lines.push(`${name}: battery ${batteryMark} → ${percent}%`);
+            }
+            // The mark moves up with a rise (new batteries, or a reading that wobbles
+            // by a point) and down only when a drop is logged.
+            if (batteryMark === undefined || percent > batteryMark || dropped || isLow !== batteryLow) {
+                batteryMark = percent;
             }
             batteryLow = isLow;
         }
@@ -97,6 +116,7 @@ class ReadingReporter {
             sampleGapMs: previous?.lateLogged === true && previous.sampleGapMs !== undefined ? previous.sampleGapMs : gapMs,
             co2High,
             batteryLow,
+            batteryMark,
             lateLogged: false,
         });
         return { lines, sample: 'new' };
@@ -119,6 +139,14 @@ class ReadingReporter {
     }
 }
 exports.ReadingReporter = ReadingReporter;
+/** True when a reading shows differently in the log. Battery is left out; its low and ok lines cover it. */
+function valuesChanged(previous, reading) {
+    return FIELDS.some((field) => {
+        const before = field.value(previous);
+        const after = field.value(reading);
+        return (before === undefined ? undefined : field.format(before)) !== (after === undefined ? undefined : field.format(after));
+    });
+}
 function summary(previous, reading, plan, now) {
     const parts = [];
     for (const field of FIELDS) {

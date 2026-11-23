@@ -59,6 +59,19 @@ describe('ReadingReporter', () => {
     expect(again).toEqual({ lines: [], sample: 'unchanged' })
   })
 
+  it('writes nothing for a new sample with the same readings', () => {
+    const reporter = new ReadingReporter()
+    reporter.observe(input(BASE))
+
+    const same = reporter.observe(input({ ...BASE, recordedAt: T0 + 10 * MINUTE, temperatureC: 20.91, pressureHpa: 1003.2 }))
+    const batteryOnly = reporter.observe(input({ ...BASE, recordedAt: T0 + 20 * MINUTE, batteryPercent: 86 }))
+    const changed = reporter.observe(input({ ...BASE, recordedAt: T0 + 30 * MINUTE, humidityPercent: 42 }))
+
+    expect(same).toEqual({ lines: [], sample: 'new' })
+    expect(batteryOnly).toEqual({ lines: [], sample: 'new' })
+    expect(changed.lines).toEqual([expect.stringContaining('41 → 42%')])
+  })
+
   it('shows what changed with an arrow', () => {
     const reporter = new ReadingReporter()
     reporter.observe(input(BASE))
@@ -103,6 +116,32 @@ describe('ReadingReporter', () => {
     expect(ok.lines).toContain('Zone One: battery ok (100%)')
   })
 
+  it('writes a battery line for each 5 point drop', () => {
+    const reporter = new ReadingReporter()
+    reporter.observe(input(BASE))
+    const at = (minutes: number, batteryPercent: number) =>
+      reporter.observe(input({ ...BASE, recordedAt: T0 + minutes * MINUTE, batteryPercent })).lines
+
+    expect(at(10, 83)).toEqual([])
+    expect(at(20, 82)).toEqual(['Zone One: battery 87 → 82%'])
+    expect(at(30, 83)).toEqual([])
+    expect(at(40, 78)).toEqual(['Zone One: battery 83 → 78%'])
+    expect(at(50, 100)).toEqual([])
+    expect(at(60, 95)).toEqual(['Zone One: battery 100 → 95%'])
+  })
+
+  it('writes a battery line for each 2 point drop below 20%', () => {
+    const reporter = new ReadingReporter()
+    reporter.observe(input({ ...BASE, batteryPercent: 22 }))
+    const at = (minutes: number, batteryPercent: number) =>
+      reporter.observe(input({ ...BASE, recordedAt: T0 + minutes * MINUTE, batteryPercent })).lines
+
+    expect(at(10, 19)).toEqual(['Zone One: battery 22 → 19%'])
+    expect(at(20, 18)).toEqual([])
+    expect(at(30, 17)).toEqual(['Zone One: battery 19 → 17%'])
+    expect(at(40, 15)).toEqual(['Zone One: battery 17 → 15%'])
+  })
+
   it('says once when samples fall behind, then when a new one arrives', () => {
     const reporter = new ReadingReporter()
     reporter.observe(input(BASE))
@@ -116,6 +155,7 @@ describe('ReadingReporter', () => {
     expect(late.lines).toEqual(['Zone One: sample is 47 min old'])
     expect(stillLate.lines).toEqual([])
     expect(back.lines[0]).toBe('Zone One: new sample after 1 h 25 min')
+    expect(back.lines[1]).toContain('Zone One: Radon 45 Bq/m³')
   })
 
   it('waits longer before calling a slow monitor late', () => {

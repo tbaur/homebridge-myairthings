@@ -6,11 +6,11 @@
  *
  * @fileoverview The log lines a poll writes about each monitor.
  *
- * A monitor gets a summary line when Airthings has a new sample for it, and a
- * short line when the air quality level, the CO₂ alert, or the battery state
- * changes, or when its samples fall behind. A poll that returns the same
- * sample again writes nothing, so the log follows the monitors rather than
- * the poll interval.
+ * A monitor gets a summary line for its first sample and for each new sample
+ * whose readings differ from the last one, and a short line when the air
+ * quality level or the CO₂ alert changes, when the battery falls another five
+ * points (two below 20%) or crosses the low level, or when its samples fall behind. A sample with the same readings, or a poll that
+ * returns the same sample again, writes nothing.
  */
 import type { NormalizedReading, SensorPlan } from '../types';
 /** Battery level HomeKit reports as low. */
