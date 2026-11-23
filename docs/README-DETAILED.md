@@ -21,7 +21,7 @@ The [README](../README.md) covers installation and setup. This page covers every
 | clientSecret | | From an API client on the Airthings consumer dashboard. `AIRTHINGS_CLIENT_SECRET` overrides this. |
 | refreshInterval | 300 | Seconds between sensor reads. Below 60 becomes 60. Above 86400 becomes 86400. |
 | co2DetectedThreshold | 1000 | ppm at which carbon dioxide is detected. The air-quality tile follows radon. |
-| debug | false | Logs radon, CO₂, temperature, and sample age for each monitor after every poll, as debug lines. Homebridge shows them only in debug mode. |
+| debug | false | Logs a debug line after each poll that reads samples: monitors, new and unchanged samples, monitors without a sample, the wait until the next poll, and the hourly request budget. Homebridge shows it only in debug mode. |
 | diagnosticsInterval | 0 | Seconds between a health line. 0 is off. Otherwise up to 3600. Values from 1 to 29 use 30. |
 | pagerdutySignals | false | Write alert conditions for [homebridge-pagerduty](https://github.com/tbaur/homebridge-pagerduty). Off until you turn it on. See [PagerDuty](#pagerduty). |
 
@@ -48,11 +48,17 @@ A monitor is removed only when a device-list request succeeds and that serial is
 | Line | When |
 | --- | --- |
 | `Airthings is unreachable: …` | The first outage. Later ones are debug until recovery. The next poll is still the normal interval. |
-| `Airthings is reachable again` | The first success after an outage or a rejected secret. |
+| `Airthings is reachable again after 4 failed polls (18 min)` | The first success after an outage or a rejected secret. The duration is left off when the outage lasted under a minute. A rate-limit answer or an empty account list also ends the outage, because Airthings answered. |
 | `Airthings rejected the client credentials` | Once per failure streak. The secret is not in the line. |
 | `Airthings rate limit reached. Retry in Ns` | The hourly budget was spent. |
 | `<name> inactive: sample older than three hours` | Once, when that monitor becomes inactive. The reason is the sample age, a missing timestamp, a timestamp ahead of this clock, no sample from Airthings for that monitor, three unreachable polls, or a poll that threw. |
-| `<serial> radon=40 co2=650 temp=21.5 age=7m` | Debug. After every poll, for each monitor, when `debug` is on and Homebridge is in debug mode. `age` is how long ago the monitor took the sample. Airthings uploads on its own schedule, so a few minutes is normal. `-` means the sample did not include that reading. |
+| `<name>: Radon 45 Bq/m³, CO2 612 ppm, 20.9°C, 41%, Air good, Battery 87%, sampled 2 min ago` | When Airthings has a new sample for that monitor. Only the readings the monitor has are listed. After the first sample, a value that changed shows both numbers, as in `CO2 612 → 845 ppm`. A poll that returns the same sample again writes nothing. |
+| `<name>: Air good → poor (radon 160 Bq/m³)` | When the Home tile's air quality level changes. The reading in brackets set the new level: radon on a radon monitor, otherwise the CO₂, PM2.5, or VOC reading that changed band. A sample that lacks those readings is not a change, and the last known level stays. |
+| `<name>: CO2 at or above 1000 ppm (1040)` / `CO2 back below 1000 ppm (820)` | Once when CO₂ reaches `co2DetectedThreshold`, and once when it drops back. A first sample that is already above logs the first line. |
+| `<name>: battery low (9%)` / `battery ok (100%)` | Once when the battery reaches 10% or lower, the level HomeKit shows as low, and once when it recovers. |
+| `<name>: sample is 47 min old` | Once, when no new sample has arrived for twice the monitor's usual gap between samples, or twice the poll interval if that is longer, and at least 15 minutes. A gap that ends a late stretch does not replace the usual gap. |
+| `<name>: new sample after 1 h 25 min` | The next sample after a `sample is … old` line, with the gap between the two samples. |
+| `Poll ok: 3 monitor(s), 2 new sample(s), 1 unchanged, 0 without a sample; next in 300s (rate budget 112/120)` | Debug. After every poll that read samples, when `debug` is on and Homebridge is in debug mode. The rate budget is left off until Airthings sends it. |
 | `poll failed: …` | A fault inside the plugin while applying a poll. The sensors go inactive, and the next poll is still the normal interval. |
 | `homebridge-pagerduty support is enabled (auth-failed, cloud-offline, stale.<serial>)` | Once, at startup, when signals are on. It is logged before the first poll. |
 | `Diagnostics start: healthy \| devices 0/0 \| rest connecting \| api p50 0ms p95 0ms (req 0, err 0)` | Once, when `diagnosticsInterval` is on, before the poll loop is armed. The plugin version is not on this line. |

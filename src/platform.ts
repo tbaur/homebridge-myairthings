@@ -25,7 +25,9 @@ import { CloudSession } from './session'
 import { DEFAULT_CO2_DETECTED_PPM, DEFAULT_NAME, PLATFORM_NAME, PLUGIN_NAME, readPluginVersion, UUID_PREFIX } from './settings'
 import type { CloudView, MonitorSnapshot, PluginLogger, PollOutcome, ResolvedConfig } from './types'
 import { parseAccessoryContext, resolvedDisplayName, writeContext } from './utils/context'
-import { isFresh, sampleAge } from './readings/sample'
+import { planFor } from './readings/plan'
+import { ReadingReporter } from './readings/report'
+import { isFresh } from './readings/sample'
 import { describeError } from './utils/errors'
 import { homeKitName, modelLabel } from './utils/names'
 import { forLog } from './utils/redact'
@@ -44,6 +46,10 @@ export class AirthingsPlatform implements DynamicPlatformPlugin, AccessoryHost {
   private readonly diagnostics = new DiagnosticsCollector()
   private config?: ResolvedConfig
   private session?: CloudSession
+  private client?: AirthingsClient
+  private readonly reporter = new ReadingReporter()
+  /** When the next poll runs, for the poll summary line. */
+  private nextWaitMs = 0
   private timer?: ReturnType<typeof setTimeout>
   private diagnosticsTimer?: ReturnType<typeof setInterval>
   private signals?: AirthingsSignals
@@ -169,12 +175,13 @@ export class AirthingsPlatform implements DynamicPlatformPlugin, AccessoryHost {
     if (this.stopped || this.config === undefined) {
       return
     }
+    this.client ??= new AirthingsClient({
+      clientId: this.config.clientId,
+      clientSecret: this.config.clientSecret,
+      log: this.log,
+    })
     this.session ??= new CloudSession({
-      client: new AirthingsClient({
-        clientId: this.config.clientId,
-        clientSecret: this.config.clientSecret,
-        log: this.log,
-      }),
+      client: this.client,
       log: this.log,
       intervalMs: this.config.refreshIntervalSec * 1000,
     })
@@ -188,6 +195,7 @@ export class AirthingsPlatform implements DynamicPlatformPlugin, AccessoryHost {
       if (this.stopped) {
         return
       }
+      this.nextWaitMs = waitMs
       this.applyOutcome(outcome)
     } catch (error) {
       this.log.error(`poll failed: ${describeError(error)}`)
@@ -259,6 +267,10 @@ export class AirthingsPlatform implements DynamicPlatformPlugin, AccessoryHost {
     this.logReadings(view.monitors)
   }
 
+  private uuidDisplayName(serialNumber: string, fallback: string): string {
+    return this.restored.get(this.uuid(serialNumber))?.displayName ?? fallback
+  }
+
   private createAccessory(snapshot: MonitorSnapshot, uuid: string): PlatformAccessory {
     const name = homeKitName(snapshot.name, snapshot.serialNumber)
     return new this.api.platformAccessory(name, uuid, this.api.hap.Categories.SENSOR)
@@ -312,6 +324,10 @@ export class AirthingsPlatform implements DynamicPlatformPlugin, AccessoryHost {
         continue
       }
       this.log.info(`removing ${forLog(accessory.displayName)}`)
+      const serialNumber = parseAccessoryContext(accessory.context)?.serialNumber
+      if (serialNumber !== undefined) {
+        this.reporter.forget(serialNumber)
+      }
       stale.push(accessory)
       this.handlers.get(uuid)?.release()
       this.restored.delete(uuid)
@@ -341,20 +357,48 @@ export class AirthingsPlatform implements DynamicPlatformPlugin, AccessoryHost {
     }
   }
 
-  /** Debug, like the other plugins: Homebridge shows it only in debug mode, and only when the setting is on. */
+  /** A line per monitor when its sample is new or something about it changed, then one debug line for the poll. */
   private logReadings(monitors: readonly MonitorSnapshot[]): void {
+    const now = Date.now()
+    let fresh = 0
+    let unchanged = 0
+    let missing = 0
+    for (const monitor of monitors) {
+      if (!monitor.samplePresent) {
+        missing += 1
+        continue
+      }
+      const result = this.reporter.observe({
+        serialNumber: monitor.serialNumber,
+        name: this.uuidDisplayName(monitor.serialNumber, monitor.name),
+        plan: planFor(monitor.sensors),
+        reading: monitor.reading,
+        co2AlertPpm: this.co2DetectedPpm,
+        pollIntervalMs: (this.config?.refreshIntervalSec ?? 0) * 1000,
+        now,
+      })
+      for (const line of result.lines) {
+        this.log.info(line)
+      }
+      if (result.sample === 'new') {
+        fresh += 1
+      } else if (result.sample === 'unchanged') {
+        unchanged += 1
+      } else {
+        missing += 1
+      }
+    }
     if (this.config?.debug !== true) {
       return
     }
-    const now = Date.now()
-    for (const monitor of monitors) {
-      const reading = monitor.reading
-      this.log.debug(
-        `${forLog(monitor.serialNumber)} radon=${reading.radonShortBq ?? '-'} `
-        + `co2=${reading.co2Ppm ?? '-'} temp=${reading.temperatureC ?? '-'} `
-        + `age=${sampleAge(reading.recordedAt, now)}`,
-      )
-    }
+    const budget = this.client?.rateBudget()
+    const budgetText = budget === undefined
+      ? ''
+      : ` (rate budget ${budget.remaining}${budget.limit === undefined ? '' : `/${budget.limit}`})`
+    this.log.debug(
+      `Poll ok: ${monitors.length} monitor(s), ${fresh} new sample(s), ${unchanged} unchanged, ${missing} without a sample; `
+      + `next in ${Math.round(this.nextWaitMs / 1000)}s${budgetText}`,
+    )
   }
 
   private keepRestoredUnavailable(): void {

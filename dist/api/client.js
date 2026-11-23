@@ -27,6 +27,7 @@ class AirthingsClient {
     now;
     token;
     notBefore = 0;
+    budget;
     abortController = new AbortController();
     constructor(options) {
         this.options = options;
@@ -35,6 +36,9 @@ class AirthingsClient {
     }
     blockedForMs(now) {
         return Math.max(0, this.notBefore - now);
+    }
+    rateBudget() {
+        return this.budget;
     }
     abort() {
         this.abortController.abort();
@@ -176,6 +180,11 @@ class AirthingsClient {
         return this.interpret(response);
     }
     note(headers) {
+        const remaining = headerNumber(headers, 'x-ratelimit-remaining');
+        if (remaining !== undefined) {
+            const limit = headerNumber(headers, 'x-ratelimit-limit');
+            this.budget = limit === undefined ? { remaining } : { remaining, limit };
+        }
         const wait = (0, rate_limit_1.rateLimitWaitMs)(headers, this.now());
         if (wait !== undefined) {
             this.notBefore = Math.max(this.notBefore, this.now() + wait);
@@ -207,4 +216,12 @@ function rejectedDeviceLine(serial) {
         return 'a device was skipped; it had no serial number';
     }
     return `device serial "${(0, redact_1.forLog)(serial)}" was skipped; a serial is 4 to 32 letters or digits`;
+}
+function headerNumber(headers, name) {
+    const raw = headers[name];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (value === undefined || !/^\d+$/.test(value.trim())) {
+        return undefined;
+    }
+    return Number(value.trim());
 }

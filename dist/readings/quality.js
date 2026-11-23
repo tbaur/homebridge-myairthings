@@ -17,6 +17,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.airQuality = airQuality;
+exports.qualityCause = qualityCause;
 const RADON_FAIR_BQ = 100;
 const RADON_POOR_BQ = 150;
 const PM_FAIR = 10;
@@ -41,6 +42,48 @@ function airQuality(plan, reading) {
         reading.pm25Micrograms === undefined ? undefined : band(reading.pm25Micrograms, PM_FAIR, PM_POOR),
         reading.vocPpb === undefined ? undefined : band(reading.vocPpb, VOC_FAIR_PPB, VOC_POOR_PPB),
     ]);
+}
+/**
+ * The reading that set the tile's level, for a log line: `radon 160 Bq/m³`.
+ *
+ * Without radon, several sensors can share the worst band. Given the previous
+ * reading, the one whose own band changed is named, since that is the one
+ * that moved the tile.
+ */
+function qualityCause(plan, reading, previous) {
+    if (plan.radonShort || plan.radonLong) {
+        const becquerels = reading.radonShortBq ?? reading.radonLongBq;
+        return becquerels === undefined ? undefined : `radon ${Math.round(becquerels)} Bq/m³`;
+    }
+    const sensors = [
+        { value: (r) => r.co2Ppm, fair: CO2_FAIR_PPM, poor: CO2_POOR_PPM, text: (v) => `CO2 ${Math.round(v)} ppm` },
+        { value: (r) => r.pm25Micrograms, fair: PM_FAIR, poor: PM_POOR, text: (v) => `PM2.5 ${Math.round(v)} µg/m³` },
+        { value: (r) => r.vocPpb, fair: VOC_FAIR_PPB, poor: VOC_POOR_PPB, text: (v) => `VOC ${Math.round(v)} ppb` },
+    ];
+    const candidates = [];
+    for (const sensor of sensors) {
+        const value = sensor.value(reading);
+        if (value === undefined) {
+            continue;
+        }
+        const level = band(value, sensor.fair, sensor.poor);
+        const before = previous === undefined ? undefined : sensor.value(previous);
+        const changed = before === undefined || band(before, sensor.fair, sensor.poor) !== level;
+        candidates.push({ level, changed, text: sensor.text(value) });
+    }
+    let worst = 'unknown';
+    for (const candidate of candidates) {
+        if (RANK[candidate.level] > RANK[worst]) {
+            worst = candidate.level;
+        }
+    }
+    const atWorst = candidates.filter((candidate) => candidate.level === worst);
+    const changedAtWorst = atWorst.find((candidate) => candidate.changed);
+    if (changedAtWorst !== undefined) {
+        return changedAtWorst.text;
+    }
+    // Every sensor at the worst level held still, so the tile improved: name the one that dropped.
+    return (candidates.find((candidate) => candidate.changed) ?? atWorst[0])?.text;
 }
 function band(value, fairAt, poorAt) {
     if (value >= poorAt) {

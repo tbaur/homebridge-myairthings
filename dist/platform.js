@@ -22,6 +22,8 @@ const monitor_1 = require("./devices/monitor");
 const session_1 = require("./session");
 const settings_1 = require("./settings");
 const context_1 = require("./utils/context");
+const plan_1 = require("./readings/plan");
+const report_1 = require("./readings/report");
 const sample_1 = require("./readings/sample");
 const errors_1 = require("./utils/errors");
 const names_1 = require("./utils/names");
@@ -39,6 +41,10 @@ class AirthingsPlatform {
     diagnostics = new collector_1.DiagnosticsCollector();
     config;
     session;
+    client;
+    reporter = new report_1.ReadingReporter();
+    /** When the next poll runs, for the poll summary line. */
+    nextWaitMs = 0;
     timer;
     diagnosticsTimer;
     signals;
@@ -157,12 +163,13 @@ class AirthingsPlatform {
         if (this.stopped || this.config === undefined) {
             return;
         }
+        this.client ??= new client_1.AirthingsClient({
+            clientId: this.config.clientId,
+            clientSecret: this.config.clientSecret,
+            log: this.log,
+        });
         this.session ??= new session_1.CloudSession({
-            client: new client_1.AirthingsClient({
-                clientId: this.config.clientId,
-                clientSecret: this.config.clientSecret,
-                log: this.log,
-            }),
+            client: this.client,
             log: this.log,
             intervalMs: this.config.refreshIntervalSec * 1000,
         });
@@ -176,6 +183,7 @@ class AirthingsPlatform {
             if (this.stopped) {
                 return;
             }
+            this.nextWaitMs = waitMs;
             this.applyOutcome(outcome);
         }
         catch (error) {
@@ -243,6 +251,9 @@ class AirthingsPlatform {
         this.report(view.monitors, created.length, removed);
         this.logReadings(view.monitors);
     }
+    uuidDisplayName(serialNumber, fallback) {
+        return this.restored.get(this.uuid(serialNumber))?.displayName ?? fallback;
+    }
     createAccessory(snapshot, uuid) {
         const name = (0, names_1.homeKitName)(snapshot.name, snapshot.serialNumber);
         return new this.api.platformAccessory(name, uuid, 10 /* this.api.hap.Categories.SENSOR */);
@@ -291,6 +302,10 @@ class AirthingsPlatform {
                 continue;
             }
             this.log.info(`removing ${(0, redact_1.forLog)(accessory.displayName)}`);
+            const serialNumber = (0, context_1.parseAccessoryContext)(accessory.context)?.serialNumber;
+            if (serialNumber !== undefined) {
+                this.reporter.forget(serialNumber);
+            }
             stale.push(accessory);
             this.handlers.get(uuid)?.release();
             this.restored.delete(uuid);
@@ -318,18 +333,48 @@ class AirthingsPlatform {
             this.log.info(line);
         }
     }
-    /** Debug, like the other plugins: Homebridge shows it only in debug mode, and only when the setting is on. */
+    /** A line per monitor when its sample is new or something about it changed, then one debug line for the poll. */
     logReadings(monitors) {
+        const now = Date.now();
+        let fresh = 0;
+        let unchanged = 0;
+        let missing = 0;
+        for (const monitor of monitors) {
+            if (!monitor.samplePresent) {
+                missing += 1;
+                continue;
+            }
+            const result = this.reporter.observe({
+                serialNumber: monitor.serialNumber,
+                name: this.uuidDisplayName(monitor.serialNumber, monitor.name),
+                plan: (0, plan_1.planFor)(monitor.sensors),
+                reading: monitor.reading,
+                co2AlertPpm: this.co2DetectedPpm,
+                pollIntervalMs: (this.config?.refreshIntervalSec ?? 0) * 1000,
+                now,
+            });
+            for (const line of result.lines) {
+                this.log.info(line);
+            }
+            if (result.sample === 'new') {
+                fresh += 1;
+            }
+            else if (result.sample === 'unchanged') {
+                unchanged += 1;
+            }
+            else {
+                missing += 1;
+            }
+        }
         if (this.config?.debug !== true) {
             return;
         }
-        const now = Date.now();
-        for (const monitor of monitors) {
-            const reading = monitor.reading;
-            this.log.debug(`${(0, redact_1.forLog)(monitor.serialNumber)} radon=${reading.radonShortBq ?? '-'} `
-                + `co2=${reading.co2Ppm ?? '-'} temp=${reading.temperatureC ?? '-'} `
-                + `age=${(0, sample_1.sampleAge)(reading.recordedAt, now)}`);
-        }
+        const budget = this.client?.rateBudget();
+        const budgetText = budget === undefined
+            ? ''
+            : ` (rate budget ${budget.remaining}${budget.limit === undefined ? '' : `/${budget.limit}`})`;
+        this.log.debug(`Poll ok: ${monitors.length} monitor(s), ${fresh} new sample(s), ${unchanged} unchanged, ${missing} without a sample; `
+            + `next in ${Math.round(this.nextWaitMs / 1000)}s${budgetText}`);
     }
     keepRestoredUnavailable() {
         for (const accessory of this.restored.values()) {

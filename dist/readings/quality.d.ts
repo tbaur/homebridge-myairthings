@@ -16,3 +16,11 @@
  */
 import type { AirQualityWord, NormalizedReading, SensorPlan } from '../types';
 export declare function airQuality(plan: SensorPlan, reading: NormalizedReading): AirQualityWord;
+/**
+ * The reading that set the tile's level, for a log line: `radon 160 Bq/m³`.
+ *
+ * Without radon, several sensors can share the worst band. Given the previous
+ * reading, the one whose own band changed is named, since that is the one
+ * that moved the tile.
+ */
+export declare function qualityCause(plan: SensorPlan, reading: NormalizedReading, previous?: NormalizedReading): string | undefined;

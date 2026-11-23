@@ -17,6 +17,7 @@ exports.backoffMs = backoffMs;
 const plan_1 = require("./readings/plan");
 const settings_1 = require("./settings");
 const errors_1 = require("./utils/errors");
+const report_1 = require("./readings/report");
 const redact_1 = require("./utils/redact");
 const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 300_000];
 /** Polls Airthings and turns failures into a wait, not a tight loop. */
@@ -31,6 +32,9 @@ class CloudSession {
     outageStreak = 0;
     authLogged = false;
     outageLogged = false;
+    /** Failed polls since the last accepted one, and when the first of them ran. */
+    failedPolls = 0;
+    failingSince;
     announcedUnknown = new Set();
     constructor(options) {
         this.options = options;
@@ -99,10 +103,12 @@ class CloudSession {
             return idle(this.options.intervalMs);
         }
         if (error instanceof errors_1.RateLimitedError) {
+            this.noteRecovery();
             this.options.log.info(error.message);
             return idle(error.retryAfterMs);
         }
         if (error instanceof errors_1.AuthError) {
+            this.noteFailure();
             this.logAuth();
             this.authStreak += 1;
             this.authOpen = true;
@@ -116,6 +122,7 @@ class CloudSession {
             };
         }
         if (error instanceof errors_1.NoAccountsError) {
+            this.noteRecovery();
             return {
                 waitMs: this.options.intervalMs,
                 unreachable: false,
@@ -126,6 +133,7 @@ class CloudSession {
             };
         }
         if (countsAsOutage(error)) {
+            this.noteFailure();
             this.logOutage(error);
             this.outageStreak += 1;
             const cloudOffline = !this.authOpen && this.outageStreak >= settings_1.FAILURES_BEFORE_STALE;
@@ -164,13 +172,24 @@ class CloudSession {
         this.outageLogged = true;
         this.options.log.warn(line);
     }
+    noteFailure() {
+        this.failedPolls += 1;
+        this.failingSince ??= this.now();
+    }
     noteRecovery() {
+        const failed = this.failedPolls;
+        const since = this.failingSince;
+        this.failedPolls = 0;
+        this.failingSince = undefined;
         if (!this.authLogged && !this.outageLogged) {
             return;
         }
         this.authLogged = false;
         this.outageLogged = false;
-        this.options.log.info('Airthings is reachable again');
+        const polls = failed === 1 ? '1 failed poll' : `${failed} failed polls`;
+        const elapsed = since === undefined ? 0 : this.now() - since;
+        const duration = elapsed >= 60_000 ? ` (${(0, report_1.formatDuration)(elapsed)})` : '';
+        this.options.log.info(`Airthings is reachable again after ${polls}${duration}`);
     }
     logUnmapped(devices) {
         for (const device of devices) {
