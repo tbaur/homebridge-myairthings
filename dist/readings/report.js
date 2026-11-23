@@ -8,7 +8,8 @@
  * @fileoverview The log lines a poll writes about each monitor.
  *
  * A monitor gets a summary line for its first sample and for each new sample
- * whose readings differ from the last one, and a short line when the air
+ * where a reading moved at least its step (0.5 °C, 50 ppm CO₂, and so on) from
+ * the value last logged, and a short line when the air
  * quality level or the CO₂ alert changes, when the battery falls another five
  * points (two below 20%) or crosses the low level, or when its samples fall behind. A sample with the same readings, or a poll that
  * returns the same sample again, writes nothing.
@@ -29,18 +30,19 @@ const BATTERY_NEAR_EMPTY_STEP_PERCENT = 2;
 /** A sample counts as late only once it is at least this old. */
 const MIN_LATE_MS = 15 * 60_000;
 const FIELDS = [
-    { label: 'Radon', value: (r) => r.radonShortBq, format: (v) => `${Math.round(v)}`, unit: ' Bq/m³' },
-    { label: 'Radon long', value: (r) => r.radonLongBq, format: (v) => `${Math.round(v)}`, unit: ' Bq/m³' },
-    { label: 'CO2', value: (r) => r.co2Ppm, format: (v) => `${Math.round(v)}`, unit: ' ppm' },
-    { label: 'VOC', value: (r) => r.vocPpb, format: (v) => `${Math.round(v)}`, unit: ' ppb' },
-    { label: 'PM2.5', value: (r) => r.pm25Micrograms, format: (v) => `${Math.round(v)}`, unit: ' µg/m³' },
-    { label: 'PM1', value: (r) => r.pm1Micrograms, format: (v) => `${Math.round(v)}`, unit: ' µg/m³' },
-    { label: '', value: (r) => r.temperatureC, format: (v) => v.toFixed(1), unit: '°C' },
-    { label: '', value: (r) => r.humidityPercent, format: (v) => `${Math.round(v)}`, unit: '%' },
-    { label: '', value: (r) => r.pressureHpa, format: (v) => `${Math.round(v)}`, unit: ' hPa' },
-    { label: 'Light', value: (r) => r.lux, format: (v) => `${Math.round(v)}`, unit: ' lx' },
-    { label: 'Sound', value: (r) => r.soundDb, format: (v) => `${Math.round(v)}`, unit: ' dB' },
-    { label: 'Mold', value: (r) => r.mold, format: (v) => `${Math.round(v)}`, unit: '' },
+    { label: 'Radon', key: 'radonShortBq', format: (v) => `${Math.round(v)}`, unit: ' Bq/m³', step: () => 10 },
+    { label: 'Radon long', key: 'radonLongBq', format: (v) => `${Math.round(v)}`, unit: ' Bq/m³', step: () => 10 },
+    { label: 'CO2', key: 'co2Ppm', format: (v) => `${Math.round(v)}`, unit: ' ppm', step: () => 50 },
+    { label: 'VOC', key: 'vocPpb', format: (v) => `${Math.round(v)}`, unit: ' ppb', step: () => 50 },
+    { label: 'PM2.5', key: 'pm25Micrograms', format: (v) => `${Math.round(v)}`, unit: ' µg/m³', step: () => 10 },
+    { label: 'PM1', key: 'pm1Micrograms', format: (v) => `${Math.round(v)}`, unit: ' µg/m³', step: () => 10 },
+    { label: '', key: 'temperatureC', format: (v) => v.toFixed(1), unit: '°C', step: () => 0.5 },
+    { label: '', key: 'humidityPercent', format: (v) => `${Math.round(v)}`, unit: '%', step: () => 3 },
+    { label: '', key: 'pressureHpa', format: (v) => `${Math.round(v)}`, unit: ' hPa', step: () => 5 },
+    // Light swings by orders of magnitude, so its step grows with the level.
+    { label: 'Light', key: 'lux', format: (v) => `${Math.round(v)}`, unit: ' lx', step: (v) => Math.max(100, Math.abs(v) / 2) },
+    { label: 'Sound', key: 'soundDb', format: (v) => `${Math.round(v)}`, unit: ' dB', step: () => 5 },
+    { label: 'Mold', key: 'mold', format: (v) => `${Math.round(v)}`, unit: '', step: () => 1 },
 ];
 /** Remembers each monitor's last sample so only changes reach the log. */
 class ReadingReporter {
@@ -65,8 +67,10 @@ class ReadingReporter {
         if (resumed) {
             lines.push(`${name}: new sample after ${formatDuration(gapMs)}`);
         }
-        if (previous === undefined || resumed || valuesChanged(previous.reading, reading)) {
-            lines.push(`${name}: ${summary(previous?.reading, reading, input.plan, now)}`);
+        let logged = previous?.logged;
+        if (logged === undefined || resumed || valuesMoved(logged, reading)) {
+            lines.push(`${name}: ${summary(logged, reading, input.plan, now)}`);
+            logged = nextLogged(logged, reading);
         }
         // A sample without the readings that set the tile does not count as a
         // level change; the last known level stays the one to compare against.
@@ -110,6 +114,7 @@ class ReadingReporter {
         this.memory.set(input.serialNumber, {
             recordedAt,
             reading,
+            logged,
             quality,
             // A gap that ended a late stretch is not the monitor's normal cadence,
             // unless it is the only gap seen so far.
@@ -139,25 +144,42 @@ class ReadingReporter {
     }
 }
 exports.ReadingReporter = ReadingReporter;
-/** True when a reading shows differently in the log. Battery is left out; its low and ok lines cover it. */
-function valuesChanged(previous, reading) {
-    return FIELDS.some((field) => {
-        const before = field.value(previous);
-        const after = field.value(reading);
-        return (before === undefined ? undefined : field.format(before)) !== (after === undefined ? undefined : field.format(after));
-    });
+/** True when a reading moved at least its step from the value last logged. Battery has its own lines. */
+function moved(field, logged, reading) {
+    const before = logged[field.key];
+    const after = reading[field.key];
+    if (before === undefined || after === undefined) {
+        return before !== after;
+    }
+    return Math.abs(after - before) >= field.step(before);
 }
-function summary(previous, reading, plan, now) {
+function valuesMoved(logged, reading) {
+    return FIELDS.some((field) => moved(field, logged, reading));
+}
+/** The new baseline: readings that moved take the new value, the rest keep the one last logged. */
+function nextLogged(logged, reading) {
+    if (logged === undefined) {
+        return reading;
+    }
+    const next = { ...reading };
+    for (const field of FIELDS) {
+        if (!moved(field, logged, reading)) {
+            next[field.key] = logged[field.key];
+        }
+    }
+    return next;
+}
+function summary(logged, reading, plan, now) {
     const parts = [];
     for (const field of FIELDS) {
-        const value = field.value(reading);
+        const value = reading[field.key];
         if (value === undefined) {
             continue;
         }
         const text = field.format(value);
-        const before = previous === undefined ? undefined : field.value(previous);
+        const before = logged?.[field.key];
         const beforeText = before === undefined ? undefined : field.format(before);
-        const shown = beforeText !== undefined && beforeText !== text
+        const shown = logged !== undefined && before !== undefined && beforeText !== text && moved(field, logged, reading)
             ? `${beforeText} → ${text}${field.unit}`
             : `${text}${field.unit}`;
         parts.push(field.label === '' ? shown : `${field.label} ${shown}`);

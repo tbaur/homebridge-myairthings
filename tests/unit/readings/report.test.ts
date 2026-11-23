@@ -65,11 +65,39 @@ describe('ReadingReporter', () => {
 
     const same = reporter.observe(input({ ...BASE, recordedAt: T0 + 10 * MINUTE, temperatureC: 20.91, pressureHpa: 1003.2 }))
     const batteryOnly = reporter.observe(input({ ...BASE, recordedAt: T0 + 20 * MINUTE, batteryPercent: 86 }))
-    const changed = reporter.observe(input({ ...BASE, recordedAt: T0 + 30 * MINUTE, humidityPercent: 42 }))
+    const changed = reporter.observe(input({ ...BASE, recordedAt: T0 + 30 * MINUTE, humidityPercent: 44 }))
 
     expect(same).toEqual({ lines: [], sample: 'new' })
     expect(batteryOnly).toEqual({ lines: [], sample: 'new' })
-    expect(changed.lines).toEqual([expect.stringContaining('41 → 42%')])
+    expect(changed.lines).toEqual([expect.stringContaining('41 → 44%')])
+  })
+
+  it('writes nothing for small moves, and logs drift once it adds up', () => {
+    const reporter = new ReadingReporter()
+    reporter.observe(input(BASE))
+    const at = (minutes: number, reading: Partial<NormalizedReading>) =>
+      reporter.observe(input({ ...BASE, recordedAt: T0 + minutes * MINUTE, ...reading })).lines
+
+    expect(at(10, { temperatureC: 21.1, co2Ppm: 640, vocPpb: 120, pm25Micrograms: 9, humidityPercent: 43 })).toEqual([])
+    expect(at(20, { temperatureC: 21.3, humidityPercent: 43 })).toEqual([])
+    const drift = at(30, { temperatureC: 21.5, humidityPercent: 43 })
+
+    expect(drift).toHaveLength(1)
+    expect(drift[0]).toContain('20.9 → 21.5°C, 43%')
+    expect(at(40, { temperatureC: 21.6, humidityPercent: 44 })).toEqual(['Zone One: Radon 45 Bq/m³, Radon long 38 Bq/m³, CO2 612 ppm, VOC 104 ppb, PM2.5 3 µg/m³, 21.6°C, 41 → 44%, 1003 hPa, Air good, Battery 87%, sampled 2 min ago'])
+  })
+
+  it('grows the light step with the level', () => {
+    const plan = planFor(['light'])
+    const reporter = new ReadingReporter()
+    reporter.observe(input({ lux: 1000 }, { plan }))
+    const at = (minutes: number, lux: number) => reporter.observe(input({ recordedAt: T0 + minutes * MINUTE, lux }, { plan })).lines
+
+    expect(at(10, 1400)).toEqual([])
+    expect(at(20, 1500)).toEqual(['Zone One: Light 1000 → 1500 lx, sampled 2 min ago'])
+    expect(at(30, 1590)).toEqual([])
+    expect(at(40, 1600)).toEqual([])
+    expect(at(50, 40)).toEqual(['Zone One: Light 1500 → 40 lx, sampled 2 min ago'])
   })
 
   it('shows what changed with an arrow', () => {
