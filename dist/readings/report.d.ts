@@ -7,7 +7,8 @@
  * @fileoverview The log lines a poll writes about each monitor.
  *
  * A monitor gets a summary line for its first sample and for each new sample
- * whose readings differ from the last one, and a short line when the air
+ * where a reading moved at least its step (0.5 °C, 50 ppm CO₂, and so on) from
+ * the value last logged, and a short line when the air
  * quality level or the CO₂ alert changes, when the battery falls another five
  * points (two below 20%) or crosses the low level, or when its samples fall behind. A sample with the same readings, or a poll that
  * returns the same sample again, writes nothing.
