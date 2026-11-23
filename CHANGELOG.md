@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/tbaur/homebridge-myairthings/compare/v1.1.0...v1.1.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* log readings only when they change, and battery every 5% drop ([7d0b533](https://github.com/tbaur/homebridge-myairthings/commit/7d0b5330eaa94d6ffc9f98688b9d571b26c597b3))
+
 ## [1.1.0](https://github.com/tbaur/homebridge-myairthings/compare/v1.0.2...v1.1.0) (2026-11-23)
 
 
