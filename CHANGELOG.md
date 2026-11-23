@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/tbaur/homebridge-myairthings/compare/v1.1.1...v1.1.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* log a reading only when it moves past its threshold ([b3d57f5](https://github.com/tbaur/homebridge-myairthings/commit/b3d57f5ad9fc45e883b95c6320ef3ed91b316009))
+
 ## [1.1.1](https://github.com/tbaur/homebridge-myairthings/compare/v1.1.0...v1.1.1) (2026-11-23)
 
 
