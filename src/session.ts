@@ -127,6 +127,7 @@ export class CloudSession {
       return idle(this.options.intervalMs)
     }
     if (error instanceof RateLimitedError) {
+      this.noteRecovery()
       this.options.log.info(error.message)
       return idle(error.retryAfterMs)
     }
@@ -145,6 +146,7 @@ export class CloudSession {
       }
     }
     if (error instanceof NoAccountsError) {
+      this.noteRecovery()
       return {
         waitMs: this.options.intervalMs,
         unreachable: false,

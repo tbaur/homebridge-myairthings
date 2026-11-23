@@ -302,6 +302,10 @@ class AirthingsPlatform {
                 continue;
             }
             this.log.info(`removing ${(0, redact_1.forLog)(accessory.displayName)}`);
+            const serialNumber = (0, context_1.parseAccessoryContext)(accessory.context)?.serialNumber;
+            if (serialNumber !== undefined) {
+                this.reporter.forget(serialNumber);
+            }
             stale.push(accessory);
             this.handlers.get(uuid)?.release();
             this.restored.delete(uuid);
@@ -334,8 +338,10 @@ class AirthingsPlatform {
         const now = Date.now();
         let fresh = 0;
         let unchanged = 0;
+        let missing = 0;
         for (const monitor of monitors) {
             if (!monitor.samplePresent) {
+                missing += 1;
                 continue;
             }
             const result = this.reporter.observe({
@@ -350,11 +356,14 @@ class AirthingsPlatform {
             for (const line of result.lines) {
                 this.log.info(line);
             }
-            if (result.isNewSample) {
+            if (result.sample === 'new') {
                 fresh += 1;
             }
-            else {
+            else if (result.sample === 'unchanged') {
                 unchanged += 1;
+            }
+            else {
+                missing += 1;
             }
         }
         if (this.config?.debug !== true) {
@@ -364,7 +373,7 @@ class AirthingsPlatform {
         const budgetText = budget === undefined
             ? ''
             : ` (rate budget ${budget.remaining}${budget.limit === undefined ? '' : `/${budget.limit}`})`;
-        this.log.debug(`Poll ok: ${monitors.length} monitor(s), ${fresh} new sample(s), ${unchanged} unchanged; `
+        this.log.debug(`Poll ok: ${monitors.length} monitor(s), ${fresh} new sample(s), ${unchanged} unchanged, ${missing} without a sample; `
             + `next in ${Math.round(this.nextWaitMs / 1000)}s${budgetText}`);
     }
     keepRestoredUnavailable() {

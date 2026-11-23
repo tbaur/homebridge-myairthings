@@ -44,7 +44,7 @@ describe('ReadingReporter', () => {
   it('writes the full summary for the first sample', () => {
     const result = new ReadingReporter().observe(input(BASE))
 
-    expect(result.isNewSample).toBe(true)
+    expect(result.sample).toBe('new')
     expect(result.lines).toEqual([
       'Zone One: Radon 45 Bq/m³, Radon long 38 Bq/m³, CO2 612 ppm, VOC 104 ppb, PM2.5 3 µg/m³, 20.9°C, 41%, 1003 hPa, Air good, Battery 87%, sampled 2 min ago',
     ])
@@ -56,7 +56,7 @@ describe('ReadingReporter', () => {
 
     const again = reporter.observe(input(BASE, { now: T0 + 7 * MINUTE }))
 
-    expect(again).toEqual({ lines: [], isNewSample: false })
+    expect(again).toEqual({ lines: [], sample: 'unchanged' })
   })
 
   it('shows what changed with an arrow', () => {
@@ -85,8 +85,8 @@ describe('ReadingReporter', () => {
     const stillHigh = reporter.observe(input({ ...BASE, recordedAt: T0 + 10 * MINUTE, co2Ppm: 1100 }))
     const low = reporter.observe(input({ ...BASE, recordedAt: T0 + 15 * MINUTE, co2Ppm: 820 }))
 
-    expect(high.lines).toContain('Zone One: CO2 above 1000 ppm (1040)')
-    expect(stillHigh.lines.some((line) => line.includes('CO2 above'))).toBe(false)
+    expect(high.lines).toContain('Zone One: CO2 at or above 1000 ppm (1040)')
+    expect(stillHigh.lines.some((line) => line.includes('CO2 at or above'))).toBe(false)
     expect(low.lines).toContain('Zone One: CO2 back below 1000 ppm (820)')
   })
 
@@ -128,10 +128,48 @@ describe('ReadingReporter', () => {
     expect(atNinety.lines).toEqual([])
   })
 
+  it('compares an air quality change with the last known level across a sample without radon', () => {
+    const reporter = new ReadingReporter()
+    reporter.observe(input(BASE))
+    const empty = reporter.observe(input({ ...BASE, recordedAt: T0 + 5 * MINUTE, radonShortBq: undefined, radonLongBq: undefined }))
+    const poor = reporter.observe(input({ ...BASE, recordedAt: T0 + 10 * MINUTE, radonShortBq: 160 }))
+
+    expect(empty.lines.some((line) => line.includes('Air good →'))).toBe(false)
+    expect(poor.lines).toContain('Zone One: Air good → poor (radon 160 Bq/m³)')
+  })
+
+  it('logs the first known level after samples that could not set one', () => {
+    const reporter = new ReadingReporter()
+    reporter.observe(input({ temperatureC: 20 }, { plan: WAVE }))
+    const known = reporter.observe(input({ recordedAt: T0 + 5 * MINUTE, co2Ppm: 1200 }, { plan: WAVE }))
+
+    expect(known.lines).toContain('Zone One: Air unknown → poor (CO2 1200 ppm)')
+  })
+
+  it('keeps the usual sample gap after a late stretch', () => {
+    const reporter = new ReadingReporter()
+    reporter.observe(input(BASE))
+    reporter.observe(input({ ...BASE, recordedAt: T0 + 5 * MINUTE }))
+    reporter.observe(input(BASE, { now: T0 + 25 * MINUTE, reading: { active: true, recordedAt: T0 + 5 * MINUTE } }))
+    reporter.observe(input({ ...BASE, recordedAt: T0 + 30 * MINUTE }))
+
+    const late = reporter.observe(input(BASE, { now: T0 + 46 * MINUTE, reading: { active: true, recordedAt: T0 + 30 * MINUTE } }))
+
+    expect(late.lines).toEqual(['Zone One: sample is 16 min old'])
+  })
+
+  it('forgets a removed monitor', () => {
+    const reporter = new ReadingReporter()
+    reporter.observe(input(BASE))
+    reporter.forget('SERIAL-0001')
+
+    expect(reporter.observe(input(BASE)).sample).toBe('new')
+  })
+
   it('ignores a sample with no timestamp', () => {
     const result = new ReadingReporter().observe(input({ ...BASE, recordedAt: undefined }))
 
-    expect(result).toEqual({ lines: [], isNewSample: false })
+    expect(result).toEqual({ lines: [], sample: 'none' })
   })
 })
 
@@ -141,6 +179,14 @@ describe('qualityCause', () => {
     expect(qualityCause(WAVE, { active: true, co2Ppm: 1200, vocPpb: 300 })).toBe('CO2 1200 ppm')
     expect(qualityCause(WAVE, { active: true, co2Ppm: 500, vocPpb: 300 })).toBe('VOC 300 ppb')
     expect(qualityCause(WAVE, { active: true })).toBeUndefined()
+  })
+
+  it('names the sensor that changed band when two share the level', () => {
+    const before = { active: true, co2Ppm: 900, pm25Micrograms: 30 }
+    const plan = planFor(['co2', 'pm25'])
+
+    expect(qualityCause(plan, { active: true, co2Ppm: 900, pm25Micrograms: 15 }, before)).toBe('PM2.5 15 µg/m³')
+    expect(qualityCause(WAVE, { active: true, co2Ppm: 500, vocPpb: 100 }, { active: true, co2Ppm: 500, vocPpb: 2500 })).toBe('VOC 100 ppb')
   })
 })
 

@@ -215,4 +215,19 @@ describe('CloudSession', () => {
 
     expect(log.lines).toContain('info Airthings is reachable again after 2 failed polls (18 min)')
   })
+
+  it('ends an outage at a rate-limit answer, not at the next sample', async () => {
+    const log = logger()
+    let now = 0
+    const listDevices = jest.fn()
+      .mockRejectedValueOnce(new ConnectionError('down'))
+      .mockRejectedValueOnce(new RateLimitedError(30 * 60_000))
+    const session = new CloudSession({ client: client({ listDevices }), log, intervalMs: 300_000, now: () => now })
+
+    await session.poll()
+    now = 5 * 60_000
+    await session.poll()
+
+    expect(log.lines).toContain('info Airthings is reachable again after 1 failed poll (5 min)')
+  })
 })

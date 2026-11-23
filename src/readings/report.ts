@@ -70,8 +70,8 @@ interface MonitorMemory {
 
 export interface ReportResult {
   lines: string[]
-  /** True when this poll brought a sample this reporter had not seen. */
-  isNewSample: boolean
+  /** `new` for a sample not seen before, `unchanged` for the same one again, `none` when there is nothing to compare yet. */
+  sample: 'new' | 'unchanged' | 'none'
 }
 
 /** Remembers each monitor's last sample so only changes reach the log. */
@@ -84,20 +84,30 @@ export class ReadingReporter {
     const previous = this.memory.get(input.serialNumber)
     const name = forLog(input.name)
 
-    if (recordedAt === undefined || (previous !== undefined && recordedAt <= previous.recordedAt)) {
-      return { lines: previous === undefined ? [] : this.lateLines(name, previous, input), isNewSample: false }
+    if (previous === undefined && recordedAt === undefined) {
+      return { lines: [], sample: 'none' }
+    }
+    if (previous !== undefined && (recordedAt === undefined || recordedAt <= previous.recordedAt)) {
+      return { lines: this.lateLines(name, previous, input), sample: 'unchanged' }
+    }
+    if (recordedAt === undefined) {
+      return { lines: [], sample: 'none' }
     }
 
     const lines: string[] = []
-    if (previous?.lateLogged === true) {
-      lines.push(`${name}: new sample after ${formatDuration(recordedAt - previous.recordedAt)}`)
+    const gapMs = previous === undefined ? undefined : recordedAt - previous.recordedAt
+    if (previous?.lateLogged === true && gapMs !== undefined && gapMs >= 60_000) {
+      lines.push(`${name}: new sample after ${formatDuration(gapMs)}`)
     }
     lines.push(`${name}: ${summary(previous?.reading, reading, input.plan, now)}`)
 
-    const quality = airQuality(input.plan, reading)
-    if (previous !== undefined && previous.quality !== 'unknown' && quality !== 'unknown' && quality !== previous.quality) {
-      const cause = qualityCause(input.plan, reading)
-      lines.push(`${name}: Air ${previous.quality} → ${quality}${cause === undefined ? '' : ` (${cause})`}`)
+    // A sample without the readings that set the tile does not count as a
+    // level change; the last known level stays the one to compare against.
+    const measured = airQuality(input.plan, reading)
+    const quality = measured === 'unknown' ? previous?.quality ?? 'unknown' : measured
+    if (previous !== undefined && measured !== 'unknown' && measured !== previous.quality) {
+      const cause = qualityCause(input.plan, reading, previous.reading)
+      lines.push(`${name}: Air ${previous.quality} → ${measured}${cause === undefined ? '' : ` (${cause})`}`)
     }
 
     let co2High = previous?.co2High ?? false
@@ -106,7 +116,7 @@ export class ReadingReporter {
       if (isHigh !== co2High) {
         const ppm = Math.round(reading.co2Ppm)
         lines.push(isHigh
-          ? `${name}: CO2 above ${input.co2AlertPpm} ppm (${ppm})`
+          ? `${name}: CO2 at or above ${input.co2AlertPpm} ppm (${ppm})`
           : `${name}: CO2 back below ${input.co2AlertPpm} ppm (${ppm})`)
       }
       co2High = isHigh
@@ -126,12 +136,14 @@ export class ReadingReporter {
       recordedAt,
       reading,
       quality,
-      sampleGapMs: previous === undefined ? undefined : recordedAt - previous.recordedAt,
+      // A gap that ended a late stretch is not the monitor's normal cadence,
+      // unless it is the only gap seen so far.
+      sampleGapMs: previous?.lateLogged === true && previous.sampleGapMs !== undefined ? previous.sampleGapMs : gapMs,
       co2High,
       batteryLow,
       lateLogged: false,
     })
-    return { lines, isNewSample: true }
+    return { lines, sample: 'new' }
   }
 
   /** Forget a monitor that left the account. */

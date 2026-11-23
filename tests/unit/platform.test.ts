@@ -200,9 +200,9 @@ describe('AirthingsPlatform', () => {
     expect(lines).toContain(
       'info Zone One: Radon 40 Bq/m³, CO2 1500 ppm, VOC 100 ppb, PM2.5 3 µg/m³, PM1 1 µg/m³, 21.0°C, 40%, 1013 hPa, Air good, Battery 9%, sampled just now',
     )
-    expect(lines).toContain('info Zone One: CO2 above 1000 ppm (1500)')
+    expect(lines).toContain('info Zone One: CO2 at or above 1000 ppm (1500)')
     expect(lines).toContain('info Zone One: battery low (9%)')
-    expect(lines).toContainEqual(expect.stringMatching(/^debug Poll ok: 2 monitor\(s\), 2 new sample\(s\), 0 unchanged; next in 300s/))
+    expect(lines).toContainEqual(expect.stringMatching(/^debug Poll ok: 2 monitor\(s\), 2 new sample\(s\), 0 unchanged, 0 without a sample; next in 300s/))
   })
 
   it('keeps the poll line at debug when the debug setting is off', async () => {
@@ -241,12 +241,14 @@ describe('AirthingsPlatform', () => {
         name: 'MyAirthings',
         clientId: fakeClientId(),
         clientSecret: fakeClientSecret(),
+        debug: true,
       }, api)
       api.emit('didFinishLaunching')
       await platform.settled()
       await jest.advanceTimersByTimeAsync(300_000)
       await platform.settled()
 
+      expect(lines).toContainEqual(expect.stringMatching(/^debug Poll ok: 2 monitor\(s\), 0 new sample\(s\), 0 unchanged, 2 without a sample;/))
       const air = registered.find((item) => item.displayName === 'Zone One')?.getService(Service.AirQualitySensor)
       expect(air?.getCharacteristic(RADON_SHORT)?.value).toBe(40)
       expect(air?.getCharacteristic(Characteristic.StatusActive).value).toBe(false)

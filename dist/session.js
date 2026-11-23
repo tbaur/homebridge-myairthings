@@ -103,6 +103,7 @@ class CloudSession {
             return idle(this.options.intervalMs);
         }
         if (error instanceof errors_1.RateLimitedError) {
+            this.noteRecovery();
             this.options.log.info(error.message);
             return idle(error.retryAfterMs);
         }
@@ -121,6 +122,7 @@ class CloudSession {
             };
         }
         if (error instanceof errors_1.NoAccountsError) {
+            this.noteRecovery();
             return {
                 waitMs: this.options.intervalMs,
                 unreachable: false,

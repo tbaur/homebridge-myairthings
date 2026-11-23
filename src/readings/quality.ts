@@ -45,29 +45,51 @@ export function airQuality(plan: SensorPlan, reading: NormalizedReading): AirQua
   ])
 }
 
-/** The reading that set the tile's level, for a log line: `radon 160 Bq/m³`. */
-export function qualityCause(plan: SensorPlan, reading: NormalizedReading): string | undefined {
+/**
+ * The reading that set the tile's level, for a log line: `radon 160 Bq/m³`.
+ *
+ * Without radon, several sensors can share the worst band. Given the previous
+ * reading, the one whose own band changed is named, since that is the one
+ * that moved the tile.
+ */
+export function qualityCause(
+  plan: SensorPlan,
+  reading: NormalizedReading,
+  previous?: NormalizedReading,
+): string | undefined {
   if (plan.radonShort || plan.radonLong) {
     const becquerels = reading.radonShortBq ?? reading.radonLongBq
     return becquerels === undefined ? undefined : `radon ${Math.round(becquerels)} Bq/m³`
   }
-  const candidates: { level: AirQualityWord, text: string }[] = []
-  if (reading.co2Ppm !== undefined) {
-    candidates.push({ level: band(reading.co2Ppm, CO2_FAIR_PPM, CO2_POOR_PPM), text: `CO2 ${Math.round(reading.co2Ppm)} ppm` })
+  const sensors = [
+    { value: (r: NormalizedReading) => r.co2Ppm, fair: CO2_FAIR_PPM, poor: CO2_POOR_PPM, text: (v: number) => `CO2 ${Math.round(v)} ppm` },
+    { value: (r: NormalizedReading) => r.pm25Micrograms, fair: PM_FAIR, poor: PM_POOR, text: (v: number) => `PM2.5 ${Math.round(v)} µg/m³` },
+    { value: (r: NormalizedReading) => r.vocPpb, fair: VOC_FAIR_PPB, poor: VOC_POOR_PPB, text: (v: number) => `VOC ${Math.round(v)} ppb` },
+  ]
+  const candidates: { level: AirQualityWord, changed: boolean, text: string }[] = []
+  for (const sensor of sensors) {
+    const value = sensor.value(reading)
+    if (value === undefined) {
+      continue
+    }
+    const level = band(value, sensor.fair, sensor.poor)
+    const before = previous === undefined ? undefined : sensor.value(previous)
+    const changed = before === undefined || band(before, sensor.fair, sensor.poor) !== level
+    candidates.push({ level, changed, text: sensor.text(value) })
   }
-  if (reading.pm25Micrograms !== undefined) {
-    candidates.push({ level: band(reading.pm25Micrograms, PM_FAIR, PM_POOR), text: `PM2.5 ${Math.round(reading.pm25Micrograms)} µg/m³` })
-  }
-  if (reading.vocPpb !== undefined) {
-    candidates.push({ level: band(reading.vocPpb, VOC_FAIR_PPB, VOC_POOR_PPB), text: `VOC ${Math.round(reading.vocPpb)} ppb` })
-  }
-  let cause: { level: AirQualityWord, text: string } | undefined
+  let worst: AirQualityWord = 'unknown'
   for (const candidate of candidates) {
-    if (cause === undefined || RANK[candidate.level] > RANK[cause.level]) {
-      cause = candidate
+    if (RANK[candidate.level] > RANK[worst]) {
+      worst = candidate.level
     }
   }
-  return cause?.text
+  const atWorst = candidates.filter((candidate) => candidate.level === worst)
+  const changedAtWorst = atWorst.find((candidate) => candidate.changed)
+  if (changedAtWorst !== undefined) {
+    return changedAtWorst.text
+  }
+  // Every sensor at the worst level held still, so the tile improved: name the one that dropped.
+  return (candidates.find((candidate) => candidate.changed) ?? atWorst[0])?.text
 }
 
 function band(value: number, fairAt: number, poorAt: number): AirQualityWord {

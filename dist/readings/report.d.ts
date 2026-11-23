@@ -27,8 +27,8 @@ export interface ReportInput {
 }
 export interface ReportResult {
     lines: string[];
-    /** True when this poll brought a sample this reporter had not seen. */
-    isNewSample: boolean;
+    /** `new` for a sample not seen before, `unchanged` for the same one again, `none` when there is nothing to compare yet. */
+    sample: 'new' | 'unchanged' | 'none';
 }
 /** Remembers each monitor's last sample so only changes reach the log. */
 export declare class ReadingReporter {
